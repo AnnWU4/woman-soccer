@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>足球游戏辅助工具</title>
+    <style>
+        /* styles.css */
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+
+        .game-container {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .goal {
+            width: 50px;
+            height: 500px;
+            background-color: #666;
+            border: 3px solid #333;
+            border-radius: 10px;
+        }
+
+        #chessboard {
+            display: grid;
+            grid-template-columns: repeat(6, 100px);
+            grid-template-rows: repeat(5, 100px);
+            gap: 2px;
+            background-color: #ddd;
+            padding: 10px;
+            position: relative;
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #fff;
+            border: 1px solid #000;
+            position: relative;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .player {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            color: white;
+            z-index: 1;
+        }
+
+        .team1 { background-color: blue; }
+        .team2 { background-color: red; }
+
+        .ball {
+            width: 20px;
+            height: 20px;
+            background-color: black;
+            border-radius: 50%;
+            position: absolute;
+            cursor: pointer;
+            left: 10px;
+            bottom: 10px;
+            z-index: 0;
+        }
+
+        .cell.two-players .player:nth-child(1) {
+            left: 10px;
+            top: 10px;
+        }
+
+        .cell.two-players .player:nth-child(2) {
+            right: 10px;
+            bottom: 10px;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="goal" id="left-goal"></div>
+        
+        <div id="chessboard"></div>
+        
+        <div class="goal" id="right-goal"></div>
+    </div>
+
+    <script>
+        // script.js
+        const ROWS = 5;
+        const COLS = 6;
+        const chessboard = document.getElementById('chessboard');
+        let selectedPlayers = [];
+        let ballPosition = { row: 0, col: 0 };
+
+        // 初始化棋盘
+        function initChessboard() {
+            chessboard.innerHTML = '';
+            for (let i = 0; i < ROWS; i++) {
+                for (let j = 0; j < COLS; j++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    chessboard.appendChild(cell);
+                }
+            }
+            initPlayers();
+            initBall();
+        }
+
+        // 初始化球员
+        function initPlayers() {
+            const initialPositions = [
+                { team: 1, row: 0, col: 0 }, { team: 1, row: 0, col: 1 }, { team: 1, row: 0, col: 2 },
+                { team: 2, row: 4, col: 3 }, { team: 2, row: 4, col: 4 }, { team: 2, row: 4, col: 5 }
+            ];
+
+            initialPositions.forEach((pos, index) => {
+                const player = document.createElement('div');
+                player.classList.add('player', `team${pos.team}`);
+                player.dataset.team = pos.team;
+                player.dataset.id = index;
+                player.textContent = `P${index + 1}`;
+                player.draggable = true;
+                player.addEventListener('dragstart', dragStart);
+                player.addEventListener('click', selectPlayer);
+                const cell = document.querySelector(`.cell[data-row="${pos.row}"][data-col="${pos.col}"]`);
+                cell.appendChild(player);
+            });
+        }
+
+        // 初始化足球
+        function initBall() {
+            const ball = document.createElement('div');
+            ball.classList.add('ball');
+            ball.draggable = true;
+            ball.addEventListener('dragstart', dragStart);
+            const cell = document.querySelector(`.cell[data-row="${ballPosition.row}"][data-col="${ballPosition.col}"]`);
+            cell.appendChild(ball);
+        }
+
+        // 拖拽逻辑
+        function dragStart(e) {
+            e.dataTransfer.setData('text/plain', e.target.dataset.id || 'ball');
+        }
+
+        chessboard.addEventListener('dragover', (e) => e.preventDefault());
+
+        chessboard.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const id = e.dataTransfer.getData('text/plain');
+            const targetCell = e.target.closest('.cell');
+            if (!targetCell) return;
+
+            const playersInCell = targetCell.querySelectorAll('.player');
+            const isBall = id === 'ball';
+
+            if (isBall) {
+                const ball = document.querySelector('.ball');
+                targetCell.appendChild(ball);
+                ballPosition = { 
+                    row: parseInt(targetCell.dataset.row), 
+                    col: parseInt(targetCell.dataset.col) 
+                };
+            } else {
+                const player = document.querySelector(`.player[data-id="${id}"]`);
+                const playerTeam = player.dataset.team;
+
+                if (playersInCell.length >= 2) return;
+                if (playersInCell.length === 1 && 
+                    playersInCell[0].dataset.team === playerTeam) return;
+
+                targetCell.appendChild(player);
+                targetCell.classList.toggle('two-players', playersInCell.length === 1);
+            }
+        });
+
+        // 选中球员连线功能
+        const canvas = document.createElement('canvas');
+        document.body.appendChild(canvas);
+
+        function selectPlayer(e) {
+            const player = e.target;
+            if (selectedPlayers.includes(player)) {
+                selectedPlayers = selectedPlayers.filter(p => p !== player);
+                player.style.border = '';
+            } else if (selectedPlayers.length < 2) {
+                selectedPlayers.push(player);
+                player.style.border = '2px solid yellow';
+            }
+
+            if (selectedPlayers.length === 2) {
+                drawLine(selectedPlayers[0], selectedPlayers[1]);
+            } else {
+                clearLine();
+            }
+        }
+
+        function drawLine(player1, player2) {
+            const rect1 = player1.getBoundingClientRect();
+            const rect2 = player2.getBoundingClientRect();
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.moveTo(rect1.left + rect1.width/2, rect1.top + rect1.height/2);
+            ctx.lineTo(rect2.left + rect2.width/2, rect2.top + rect2.height/2);
+            ctx.strokeStyle = 'green';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function clearLine() {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // 窗口大小变化时重绘连线
+        window.addEventListener('resize', () => {
+            if (selectedPlayers.length === 2) {
+                drawLine(selectedPlayers[0], selectedPlayers[1]);
+            }
+        });
+
+        initChessboard();
+    </script>
+</body>
+</html>
